@@ -1,10 +1,12 @@
+//! A rusty utility crate for common BYOND types
+
 use duplicate::duplicate_item;
 
 /// A representation of the `Dir` type.
 ///
-/// Enum discriminants are the same as the internal BYOND value, eg North = 1, South = 2, ...
+/// Enum discriminants are the same as the internal BYOND value, eg `North` = 1, `South` = 2, ...
 ///
-/// All represents the special value created when all four cardinals are masked together
+/// `All` represents the special value created when all four cardinals are masked together
 ///
 /// Implements both `From` and `Into` for all primitive numeric types
 #[derive(Eq, PartialEq, Copy, Clone, Default, Debug)]
@@ -111,6 +113,119 @@ impl Dir {
             _ => None,
         }
     }
+
+    /// Rotates a direction clockwise or counterclockwise by the number of degrees specified by `by` (direction depends
+    /// on sign of `by`). Accepts arbitrarily large values, final direction is calculated from `by`
+    ///
+    /// Returns the new direction.
+    ///
+    /// Must always be called with a multiple of 45
+    ///
+    /// Prefer to use the `const` explicit variations of this function when possible as their evaluation is resolved further
+    /// at compile time
+    ///
+    /// Special case: All always returns itself
+    #[must_use]
+    pub fn rotate(self, by: i32) -> Self {
+        assert_eq!(by % 45, 0, "Rotation must be a multiple of 45 degrees");
+        if Self::All == self {
+            return self;
+        }
+
+        let mut dir = self;
+        for _ in 0..by.abs() / 45 {
+            dir = if by > 0 {
+                dir.rotate_cw_45()
+            } else {
+                dir.rotate_ccw_45()
+            };
+        }
+        dir
+    }
+
+    /// Rotates the direction clockwise by 45 degrees, returning the new direction
+    ///
+    /// This function is safe to chain (`.rotate_cw_45().rotate_cw_45()`) with no added performance cost due to its
+    /// `const` evaluation
+    ///
+    /// Special case: All always returns itself
+    #[must_use]
+    pub const fn rotate_cw_45(self) -> Self {
+        match self {
+            Self::North => Self::Northeast,
+            Self::South => Self::Southwest,
+            Self::East => Self::Southeast,
+            Self::West => Self::Northwest,
+            Self::Southeast => Self::South,
+            Self::Southwest => Self::West,
+            Self::Northeast => Self::East,
+            Self::Northwest => Self::North,
+            Self::All => Self::All,
+        }
+    }
+
+    /// Rotates the direction clockwise by 90 degrees, returning the new direction
+    ///
+    /// This function is safe to chain (`.rotate_cw_90().rotate_cw_90()) with no added performance cost due to its
+    /// `const` evaluation
+    ///
+    /// Special case: All always returns itself
+    #[must_use]
+    pub const fn rotate_cw_90(self) -> Self {
+        match self {
+            Self::North => Self::East,
+            Self::South => Self::West,
+            Self::East => Self::South,
+            Self::West => Self::North,
+            Self::Southeast => Self::Southwest,
+            Self::Southwest => Self::Northwest,
+            Self::Northeast => Self::Southeast,
+            Self::Northwest => Self::Northeast,
+            Self::All => Self::All,
+        }
+    }
+
+    /// Rotates the direction clockwise by 45 degrees, returning the new direction
+    ///
+    /// This function is safe to chain (`.rotate_cw_45().rotate_cw_45()) with no added performance cost due to its
+    /// `const` evaluation
+    ///
+    /// Special case: All always returns itself
+    #[must_use]
+    pub const fn rotate_ccw_45(self) -> Self {
+        match self {
+            Self::North => Self::Northwest,
+            Self::South => Self::Southeast,
+            Self::East => Self::Northeast,
+            Self::West => Self::Southwest,
+            Self::Southeast => Self::East,
+            Self::Southwest => Self::South,
+            Self::Northeast => Self::North,
+            Self::Northwest => Self::West,
+            Self::All => Self::All,
+        }
+    }
+
+    /// Rotates the direction counterclockwise by 90 degrees, returning the new direction
+    ///
+    /// This function is safe to chain (`.rotate_ccw_90().rotate_ccw_90()) with no added performance cost due to its
+    /// `const` evaluation
+    ///
+    /// Special case: All always returns itself
+    #[must_use]
+    pub const fn rotate_ccw_90(self) -> Self {
+        match self {
+            Self::North => Self::West,
+            Self::South => Self::East,
+            Self::East => Self::North,
+            Self::West => Self::South,
+            Self::Southeast => Self::Northeast,
+            Self::Southwest => Self::Southeast,
+            Self::Northeast => Self::Northwest,
+            Self::Northwest => Self::Southwest,
+            Self::All => Self::All,
+        }
+    }
 }
 
 #[duplicate_item(
@@ -145,6 +260,45 @@ mod number_conversions {
 #[cfg(test)]
 mod tests {
     use crate::Dir;
+
+    #[test]
+    fn dir_rotations() {
+        // rotating clockwise then counterclockwise by the same value yields the same dir for all dirs
+        for dir in Dir::cardinals_and_diagonals() {
+            assert_eq!(dir.rotate_cw_45().rotate_ccw_45(), dir);
+            assert_eq!(dir.rotate_cw_90().rotate_ccw_90(), dir);
+        }
+
+        // clockwise rotations
+        assert_eq!(Dir::North.rotate_cw_45(), Dir::Northeast);
+        assert_eq!(Dir::North.rotate_cw_90(), Dir::East);
+        assert_eq!(Dir::North.rotate_cw_45().rotate_cw_45(), Dir::East);
+        assert_eq!(
+            Dir::North.rotate_cw_45().rotate_cw_45(),
+            Dir::North.rotate_cw_90()
+        );
+        assert_eq!(Dir::North.rotate_cw_90().rotate_cw_90(), Dir::South);
+
+        // counterclockwise rotations
+        assert_eq!(Dir::North.rotate_ccw_45(), Dir::Northwest);
+        assert_eq!(Dir::North.rotate_ccw_90(), Dir::West);
+        assert_eq!(Dir::North.rotate_ccw_45().rotate_ccw_45(), Dir::West);
+        assert_eq!(
+            Dir::North.rotate_ccw_45().rotate_ccw_45(),
+            Dir::North.rotate_ccw_90()
+        );
+        assert_eq!(Dir::North.rotate_ccw_90().rotate_ccw_90(), Dir::South);
+
+        // arbitrary values in `rotate` function yield correct results
+        assert_eq!(Dir::North.rotate(180), Dir::South);
+        assert_eq!(Dir::North.rotate(-180), Dir::South);
+        assert_eq!(Dir::North.rotate(90), Dir::East);
+        assert_eq!(Dir::North.rotate(-90), Dir::West);
+        assert_eq!(Dir::North.rotate(45), Dir::Northeast);
+        assert_eq!(Dir::North.rotate(-45), Dir::Northwest);
+        assert_eq!(Dir::North.rotate(135), Dir::Southeast);
+        assert_eq!(Dir::North.rotate(-135), Dir::Southwest);
+    }
 
     #[test]
     fn dir_combination() {
